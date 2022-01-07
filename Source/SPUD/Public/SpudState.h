@@ -103,7 +103,9 @@ protected:
 	FSpudNamedObjectData* GetGlobalObjectData(const UObject* Obj, bool AutoCreate);
 	FSpudNamedObjectData* GetGlobalObjectData(const FString& ID, bool AutoCreate);
 
-	bool ShouldActorBeRespawnedOnRestore(AActor* Actor) const;
+public:
+	static bool ShouldActorBeRespawnedOnRestore(AActor* Actor);
+protected:
 	bool ShouldActorTransformBeRestored(AActor* Actor) const;
 	bool ShouldActorVelocityBeRestored(AActor* Actor) const;
 	void StoreActor(AActor* Actor, FSpudSaveData::TLevelDataPtr LevelData);
@@ -116,7 +118,7 @@ protected:
 	void RestoreLoadedWorld(UWorld* World, bool bSingleLevel, const FString& OnlyLevelName = "");
 	// Returns whether this is an actor which is not technically in a level, but is auto-created so doesn't need to be
 	// spawned by the restore process. E.g. GameMode, Pawns
-	bool ShouldRespawnRuntimeActor(const AActor* Actor) const;
+	static bool ShouldRespawnRuntimeActor(const AActor* Actor);
 	void PreRestoreObject(UObject* Obj, uint32 StoredUserVersion);
 	void PostRestoreObject(UObject* Obj, const FSpudCustomData& FromCustomData, uint32 StoredUserVersion);
 	void RestoreActor(AActor* Actor, FSpudSaveData::TLevelDataPtr LevelData, const TMap<FGuid, UObject*>* RuntimeObjects);
@@ -254,7 +256,7 @@ public:
 	/// Restores a single actor from  this state. Does not require the actor to implement ISpudObject.
 	/// NOTE: this is a limited function, it's less efficient than using RestoreLevel for multiple actors, and it
 	/// also cannot restore object cross-references if those references refer to runtime-spawned objects
-	void RestoreActor(AActor* Actor);
+	void RestoreActor(AActor* Actor, bool bReportError = true);
 	
 	/// Restore the contents of a single global object
 	/// This object will have the same state across all levels.

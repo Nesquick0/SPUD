@@ -160,6 +160,7 @@ void USpudSubsystem::OnPreLoadMap(const FString& MapName)
 	{
 		UnsubscribeAllLevelObjectEvents();
 
+#if 0 // Disable. Don't need to save streaming levels automatically.
 		const auto World = GetWorld();
 		if (IsValid(World))
 		{
@@ -168,6 +169,7 @@ void USpudSubsystem::OnPreLoadMap(const FString& MapName)
 			// Block while doing it so they all get written predictably
 			StoreWorld(World, true, true);
 		}
+#endif
 	}
 }
 
@@ -514,8 +516,15 @@ void USpudSubsystem::LoadGame(const FString& SlotName)
 
 	// This is deferred, final load process will happen in PostLoadMap
 	SlotNameInProgress = SlotName;
-	UE_LOG(LogSpudSubsystem, Verbose, TEXT("(Re)loading map: %s"), *State->GetPersistentLevel());		
-	UGameplayStatics::OpenLevel(GetWorld(), FName(State->GetPersistentLevel()));
+	FString LevelName = State->GetPersistentLevel();
+#if WITH_EDITOR
+	if (GetWorld() && GetWorld()->WorldType == EWorldType::PIE)
+	{
+		LevelName = GetWorld()->GetName();
+	}
+#endif
+	UE_LOG(LogSpudSubsystem, Verbose, TEXT("(Re)loading map: %s"), *LevelName);
+	UGameplayStatics::OpenLevel(GetWorld(), FName(LevelName));
 }
 
 
@@ -924,7 +933,7 @@ TArray<USpudSaveGameInfo*> USpudSubsystem::GetSaveGameList(bool bIncludeQuickSav
 	return Ret;
 }
 
-USpudSaveGameInfo* USpudSubsystem::GetSaveGameInfo(const FString& SlotName)
+USpudSaveGameInfo* USpudSubsystem::GetSaveGameInfo(const FString& SlotName, bool bReportError)
 {
 	IFileManager& FM = IFileManager::Get();
 	// We want to parse just the very first part of the file, not all of it
@@ -933,7 +942,10 @@ USpudSaveGameInfo* USpudSubsystem::GetSaveGameInfo(const FString& SlotName)
 
 	if(!Archive)
 	{
-		UE_LOG(LogSpudSubsystem, Error, TEXT("Unable to open %s for reading info"), *AbsoluteFilename);
+		if (bReportError)
+		{
+			UE_LOG(LogSpudSubsystem, Error, TEXT("Unable to open %s for reading info"), *AbsoluteFilename);
+		}
 		return nullptr;
 	}
 		

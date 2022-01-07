@@ -437,7 +437,7 @@ FString SpudPropertyUtil::WriteActorRefPropertyData(FProperty* OProp,
 	// We already have the Actor so no need to get property value
 	if (Actor)
 	{
-		if (IsRuntimeActor(Actor))
+		if (USpudState::ShouldActorBeRespawnedOnRestore(Actor))
 		{
 			// For runtime objects, we need GUID
 			auto GuidProperty = FindGuidProperty(Actor);
@@ -648,6 +648,15 @@ FString SpudPropertyUtil::ReadActorRefPropertyData(FProperty* OProp,
 						break;
 				}
 			}
+#if WITH_EDITOR
+			// If not found try second try in any package.
+			if (!Obj)
+			{
+				UE_LOG(LogSpudProps, Warning, TEXT("Could not locate level object for property %s, name was %s, trying in ANY_PACKAGE"), *OProp->GetName(), *RefString);
+				Obj = StaticFindObject(AActor::StaticClass(), ANY_PACKAGE, *RefString);
+			}
+#endif //WITH_EDITOR
+
 			if (Obj)
 			{
 				SetObjectPropertyValue(OProp, Data, Obj);
@@ -959,7 +968,7 @@ void SpudPropertyUtil::StoreContainerProperty(FProperty* Property,
 	}
 	if (!bUpdateOK)
 	{
-		UE_LOG(LogSpudProps, Error, TEXT("Unable to update from property %s, unsupported type."), *Property->GetName());
+		UE_LOG(LogSpudProps, Fatal, TEXT("Unable to update from property %s, unsupported type."), *Property->GetName());
 	}
 	
 }
@@ -1111,7 +1120,7 @@ void SpudPropertyUtil::RestoreContainerProperty(UObject* RootObject, FProperty* 
 	}
 	if (!bUpdateOK)
 	{
-		UE_LOG(LogSpudProps, Error, TEXT("Unable to restore property %s, unsupported type."), *Property->GetName());
+		UE_LOG(LogSpudProps, Fatal, TEXT("Unable to restore property %s, unsupported type."), *Property->GetName());
 	}
 	
 }

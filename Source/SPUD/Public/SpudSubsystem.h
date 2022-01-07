@@ -156,6 +156,7 @@ protected:
 	UPROPERTY()
 	USpudState* ActiveState;
 
+public:
 	USpudState* GetActiveState()
 	{
 		if (!IsValid(ActiveState))
@@ -164,6 +165,7 @@ protected:
 		return ActiveState;
 	}
 
+protected:
 	struct FStreamLevelRequests
 	{
 		TArray<TWeakObjectPtr<>> Requesters;
@@ -377,7 +379,7 @@ public:
 
 	/// Get information about a specific save game slot
 	UFUNCTION(BlueprintCallable, BlueprintAuthorityOnly)
-	USpudSaveGameInfo* GetSaveGameInfo(const FString& SlotName);
+	USpudSaveGameInfo* GetSaveGameInfo(const FString& SlotName, bool bReportError=true);
 
 
 	/// By default you're not allowed to interrupt save / load operations and any requests received while another is

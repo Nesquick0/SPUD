@@ -64,7 +64,7 @@ void FSpudEditorModule::PreBeginPIE(bool)
 		}
 		else
 		{
-			UE_LOG(LogSpudEditor, Error, TEXT("Unsaved Levels: %s\n"
+			UE_LOG(LogSpudEditor, Log, TEXT("Unsaved Levels: %s\n"
                 "  Unsaved levels cause problems with persistence, because detecting which objects are runtime spawned or level spawned is unreliable.\n"
                 "  Use File > Save All Levels before playing in editor to fix this error, or enable auto-save in the SPUD plugin settings."),
                 *FString::Join(UnsavedLevels, TEXT(", ")));

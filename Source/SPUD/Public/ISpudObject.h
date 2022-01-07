@@ -87,7 +87,7 @@ public:
 	/// Called just before this object and its SaveGame properties are persisted into a game state.
 	/// This is called for root saved objects and nested UObjects
 	UFUNCTION(BlueprintCallable, BlueprintNativeEvent, Category = "SPUD")
-    void SpudPreStore(const USpudState* State);
+    void SpudPreSave(const USpudState* State);
 	
 	/// Called just after all the automatic property data has been written to the state for this object, but before the
 	/// record is sealed. This is the place you can write any custom data you need that you can't expose in a UPROPERTY
@@ -95,12 +95,12 @@ public:
 	/// You are in charge of making sure you write/read the same data in the finalise methods.
 	/// This is only called for root objects (Actors and global objects), not nested UObjects, which cannot store custom data
 	UFUNCTION(BlueprintCallable, BlueprintNativeEvent, Category = "SPUD")
-    void SpudStoreCustomData(const USpudState* State, USpudStateCustomData* CustomData);
+    void SpudSaveCustomData(const USpudState* State, USpudStateCustomData* CustomData);
 
 	/// Called just after this object and its SaveGame properties have been persisted (no further state can be written for this object)
 	/// This is called for root objects and nested UObjects
 	UFUNCTION(BlueprintCallable, BlueprintNativeEvent, Category = "SPUD")
-    void SpudPostStore(const USpudState* State);
+    void SpudPostSave(const USpudState* State);
 
 	/// Called just before PreRestore if the UserDataModelVersion of the stored data for this object is out of date
 	/// This is an alternative to calling UpgradeAllSaveGames on USpudSubsystem, you can upgrade on demand with the
@@ -109,12 +109,12 @@ public:
 	/// if you want to alter things afterwards.
 	/// This is only called for root objects (actors and global objects), not nested UObjects
 	UFUNCTION(BlueprintCallable, BlueprintNativeEvent, Category = "SPUD")
-    void SpudPreRestoreDataModelUpgrade(USpudState* State, int32 StoredVersion, int32 CurrentVersion);
+    void SpudPreLoadDataModelUpgrade(USpudState* State, int32 StoredVersion, int32 CurrentVersion);
 	
 	/// Called just before this object's state is populated from a persistent state
 	/// This is called for root objects and nested UObjects
 	UFUNCTION(BlueprintCallable, BlueprintNativeEvent, Category = "SPUD")
-    void SpudPreRestore(const USpudState* State);
+    void SpudPreLoad(const USpudState* State);
 	
 	/// Called just after all the automatic property data has been loaded for this object, but before the
 	/// record is finished. This is the place you can read any custom data you wrote during
@@ -122,7 +122,7 @@ public:
 	/// You are in charge of making sure you write/read the same data in the finalise methods
 	/// This is only called for root objects (actors and global objects), not nested UObjects
 	UFUNCTION(BlueprintCallable, BlueprintNativeEvent, Category = "SPUD")
-    void SpudRestoreCustomData(USpudState* State, USpudStateCustomData* CustomData);
+    void SpudLoadCustomData(USpudState* State, USpudStateCustomData* CustomData);
 
 	/// Called just before PostRestore if the UserDataModelVersion of the stored data for this object is out of date
 	/// This is an alternative to calling UpgradeAllSaveGames on USpudSubsystem, you can upgrade on demand with the
@@ -130,11 +130,11 @@ public:
 	/// can do some post-restore things specific to the data model being changed.
 	/// This is only called for root objects (actors and global objects), not nested UObjects
 	UFUNCTION(BlueprintCallable, BlueprintNativeEvent, Category = "SPUD")
-    void SpudPostRestoreDataModelUpgrade(const USpudState* State, int32 StoredVersion, int32 CurrentVersion);
+    void SpudPostLoadDataModelUpgrade(const USpudState* State, int32 StoredVersion, int32 CurrentVersion);
 
 	/// Called just after the state for this object has been fully restored.
 	/// This is called for root objects and nested UObjects
 	UFUNCTION(BlueprintCallable, BlueprintNativeEvent, Category = "SPUD")
-    void SpudPostRestore(const USpudState* State);
+    void SpudPostLoad(const USpudState* State);
 
 };

@@ -6,7 +6,7 @@
 const FString UTestSaveObjectCustomData::TestChunkID1("chk1");
 const FString UTestSaveObjectCustomData::TestChunkID2("chk2");
 
-void UTestSaveObjectCustomData::SpudStoreCustomData_Implementation(const USpudState* State,
+void UTestSaveObjectCustomData::SpudSaveCustomData_Implementation(const USpudState* State,
 	USpudStateCustomData* CustomData)
 {
 	// store as a custom chunk, nested
@@ -25,7 +25,7 @@ void UTestSaveObjectCustomData::SpudStoreCustomData_Implementation(const USpudSt
 	
 }
 
-void UTestSaveObjectCustomData::SpudRestoreCustomData_Implementation(USpudState* State,
+void UTestSaveObjectCustomData::SpudLoadCustomData_Implementation(USpudState* State,
 	USpudStateCustomData* CustomData)
 {
 	// This method includes a lot of double checking, you'd normally just mirror the store in read form
