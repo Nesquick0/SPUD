@@ -249,22 +249,22 @@ public:
 	
 	static void RestoreProperty(UObject* RootObject, FProperty* Property, void* ContainerPtr,
 	                            const FSpudPropertyDef& StoredProperty,
-	                            const RuntimeObjectMap* RuntimeObjects,
+	                            RuntimeObjectMap* RuntimeObjects,
 	                            const FSpudClassMetadata& Meta,
 	                            int Depth, FMemoryReader& DataIn);
 	static void RestoreArrayProperty(UObject* RootObject, FArrayProperty* const AProp, void* ContainerPtr,
 	                                 const FSpudPropertyDef& StoredProperty,
-	                                 const RuntimeObjectMap* RuntimeObjects,
+	                                 RuntimeObjectMap* RuntimeObjects,
 	                                 const FSpudClassMetadata& Meta,
 	                                 int Depth, FMemoryReader& DataIn);
 	static void RestoreMapProperty(UObject* RootObject, FMapProperty* const AProp, void* ContainerPtr,
 	                               const FSpudPropertyDef& StoredProperty,
-	                               const RuntimeObjectMap* RuntimeObjects,
+	                               RuntimeObjectMap* RuntimeObjects,
 	                               const FSpudClassMetadata& Meta,
 	                               int Depth, FMemoryReader& DataIn);
 	static void RestoreContainerProperty(UObject* RootObject, FProperty* const Property,
 	                                     void* ContainerPtr, const FSpudPropertyDef& StoredProperty,
-	                                     const RuntimeObjectMap* RuntimeObjects,
+	                                     RuntimeObjectMap* RuntimeObjects,
 	                                     const FSpudClassMetadata& Meta,
 	                                     int Depth, FMemoryReader& DataIn);
 
@@ -357,7 +357,8 @@ protected:
 	                                         TArray<uint32>& PropertyOffsets,
 	                                         FSpudClassMetadata& Meta,
 	                                         FArchive& Out);
-	static FString WriteNestedUObjectPropertyData(::FObjectProperty* OProp,
+	template<typename T>
+	static FString WriteNestedUObjectPropertyData(T* OProp,
 	                                              UObject* UObj,
 	                                              FPlatformTypes::uint32 PrefixID,
 	                                              const void* Data,
@@ -462,22 +463,23 @@ protected:
 	static uint16 ReadEnumPropertyData(FEnumProperty* EProp, void* Data, FArchive& In);
 	static bool TryReadEnumPropertyData(FProperty* Prop, void* Data, const FSpudPropertyDef& StoredProperty,
 	                                    int Depth, FArchive& In);
-	static FString ReadActorRefPropertyData(FProperty* OProp, void* Data, const RuntimeObjectMap* RuntimeObjects, ULevel* Level, FArchive& In);
-	static FString ReadNestedUObjectPropertyData(FObjectProperty* OProp,
+	static FString ReadActorRefPropertyData(FProperty* OProp, void* Data, RuntimeObjectMap* RuntimeObjects, ULevel* Level, FArchive& In);
+	template<typename T>
+	static FString ReadNestedUObjectPropertyData(T* OProp,
 	                                             void* Data,
-	                                             const RuntimeObjectMap* RuntimeObjects,
+	                                             RuntimeObjectMap* RuntimeObjects,
 	                                             ULevel* Level,
 	                                             UObject* Outer,
 	                                             const FSpudClassMetadata& Meta,
 	                                             FArchive& In);
 	static FString ReadSubclassOfPropertyData(FClassProperty* CProp,
 	                                          void* Data,
-	                                          const RuntimeObjectMap* RuntimeObjects,
+	                                          RuntimeObjectMap* RuntimeObjects,
 	                                          ULevel* Level,
 	                                          const FSpudClassMetadata& Meta,
 	                                          FArchive& In);
 	static bool TryReadUObjectPropertyData(::FProperty* Prop, void* Data, const ::FSpudPropertyDef& StoredProperty,
-	                                        const RuntimeObjectMap* RuntimeObjects,
+	                                        RuntimeObjectMap* RuntimeObjects,
 	                                        ULevel* Level, UObject* Outer, const FSpudClassMetadata& Meta, int Depth, FArchive& In);
 	static void SetObjectPropertyValue(FProperty* Property, void* Data, UObject* Obj);
 

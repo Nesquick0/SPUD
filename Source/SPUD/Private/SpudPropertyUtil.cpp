@@ -476,7 +476,8 @@ FString SpudPropertyUtil::WriteActorRefPropertyData(FProperty* OProp,
 	return RefString;
 }
 
-FString SpudPropertyUtil::WriteNestedUObjectPropertyData(FObjectProperty* OProp,
+template<typename T>
+FString SpudPropertyUtil::WriteNestedUObjectPropertyData(T* OProp,
                                                          UObject* UObj,
                                                          uint32 PrefixID,
                                                          const void* Data,
@@ -491,17 +492,43 @@ FString SpudPropertyUtil::WriteNestedUObjectPropertyData(FObjectProperty* OProp,
 
 	uint32 ClassID;
 	FString Ret = "NULL";
+	FString RefString;
 	// We already have the Actor so no need to get property value
 	if (UObj)
 	{		
 		// UObjects (not actor refs) first store the class (as an ID)
 		Ret = GetClassName(UObj);
 		ClassID = Meta.FindOrAddClassIDFromName(Ret);
+
+		// For runtime objects, we need GUID
+		auto GuidProperty = FindGuidProperty(UObj);
+		if (!GuidProperty)
+		{
+			UE_LOG(LogSpudProps, Error, TEXT("Object reference %s/%s points to UObject %s but that UObject has no SpudGuid property. Won't link multiple pointers to this one."),
+				*ClassDef->ClassName, *OProp->GetName(), *UObj->GetName());
+			// This essentially becomes a null reference
+			RefString = FString();
+		}
+		else
+		{
+			FGuid Guid = GetGuidProperty(UObj, GuidProperty);
+			if (!Guid.IsValid())
+			{
+				// We automatically generate a Guid for any referenced object if it doesn't have one already
+				Guid = FGuid::NewGuid();
+				SetGuidProperty(UObj, GuidProperty, Guid);
+			}
+			// We write the GUID as {00000000-0000-0000-0000-000000000000} format so that it's easy to detect when loading
+			// vs an object name (first char is open brace)
+			RefString = Guid.ToString(EGuidFormats::DigitsWithHyphensInBraces);
+			Ret += ", " + RefString;
+		}
 	}
 	else // null
 		ClassID = SPUDDATA_CLASSID_NONE;
 	
 	Out << ClassID;
+	Out << RefString;
 
 	// Note that we ONLY write the class (or null) here. Actual property data is cascaded separately
 	return Ret;
@@ -583,6 +610,13 @@ bool SpudPropertyUtil::TryWriteUObjectPropertyData(FProperty* Property,
 			                                                   PropertyOffsets, Meta, Out);
 			UE_LOG(LogSpudProps, Verbose, TEXT("%s = %s"), *GetLogPrefix(Property, Depth), *Val);
 		}
+		else if (WeakProp) // Weak object properties on nested (non-owned)
+		{
+			// non-actor UObject
+			const FString Val = WriteNestedUObjectPropertyData(WeakProp, Obj, PrefixID, Data, bIsArrayElement, ClassDef,
+				PropertyOffsets, Meta, Out);
+			UE_LOG(LogSpudProps, Verbose, TEXT("%s = %s"), *GetLogPrefix(Property, Depth), *Val);
+		}
 		return true;
 	}
 	return false;
@@ -591,7 +625,7 @@ bool SpudPropertyUtil::TryWriteUObjectPropertyData(FProperty* Property,
 
 FString SpudPropertyUtil::ReadActorRefPropertyData(FProperty* OProp,
                                                    void* Data,
-                                                   const RuntimeObjectMap* RuntimeObjects,
+                                                   RuntimeObjectMap* RuntimeObjects,
                                                    ULevel* Level,
                                                    FArchive& In)
 {
@@ -675,9 +709,10 @@ FString SpudPropertyUtil::ReadActorRefPropertyData(FProperty* OProp,
 	return RefString;
 }
 
-FString SpudPropertyUtil::ReadNestedUObjectPropertyData(FObjectProperty* OProp,
+template<typename T>
+FString SpudPropertyUtil::ReadNestedUObjectPropertyData(T* OProp,
                                                         void* Data,
-                                                        const RuntimeObjectMap* RuntimeObjects,
+                                                        RuntimeObjectMap* RuntimeObjects,
                                                         ULevel* Level,
                                                         UObject* Outer,
                                                         const FSpudClassMetadata& Meta,
@@ -685,6 +720,8 @@ FString SpudPropertyUtil::ReadNestedUObjectPropertyData(FObjectProperty* OProp,
 {
 	uint32 ClassID;
 	In << ClassID;
+	FString RefString;
+	In << RefString;
 
 	UObject* Object = nullptr;
 	FString Ret = "NULL";
@@ -711,9 +748,26 @@ FString SpudPropertyUtil::ReadNestedUObjectPropertyData(FObjectProperty* OProp,
 				return Ret;
 			}
 
-			Object = NewObject<UObject>(Outer, Class);
-			OProp->SetObjectPropertyValue(Data, Object);
-			Ret = ClassName;
+			bool RestoredFromGuid = false;
+			FGuid Guid;
+			if (!RefString.IsEmpty() && FGuid::ParseExact(RefString, EGuidFormats::DigitsWithHyphensInBraces, Guid))
+			{
+				auto ObjPtr = RuntimeObjects->Find(Guid);
+				if (ObjPtr)
+				{
+					OProp->SetObjectPropertyValue(Data, *ObjPtr);
+					RestoredFromGuid = true;
+				}
+			}
+
+			if (!RestoredFromGuid)
+			{
+				Object = NewObject<UObject>(Outer, Class);
+				OProp->SetObjectPropertyValue(Data, Object);
+				RuntimeObjects->Add(Guid, Object);
+			}
+
+			Ret = ClassName + " " + RefString;
 		}
 		// Otherwise, we leave the existing instance there
 		// Nested properties will be re-populated as before during cascade
@@ -724,7 +778,7 @@ FString SpudPropertyUtil::ReadNestedUObjectPropertyData(FObjectProperty* OProp,
 
 FString SpudPropertyUtil::ReadSubclassOfPropertyData(FClassProperty* CProp,
                                                      void* Data,
-                                                     const RuntimeObjectMap* RuntimeObjects,
+                                                     RuntimeObjectMap* RuntimeObjects,
                                                      ULevel* Level,
                                                      const FSpudClassMetadata& Meta,
                                                      FArchive& In)
@@ -763,7 +817,7 @@ FString SpudPropertyUtil::ReadSubclassOfPropertyData(FClassProperty* CProp,
 
 
 bool SpudPropertyUtil::TryReadUObjectPropertyData(FProperty* Prop, void* Data,
-                                                  const FSpudPropertyDef& StoredProperty, const RuntimeObjectMap* RuntimeObjects, ULevel* Level, UObject* Outer,
+                                                  const FSpudPropertyDef& StoredProperty, RuntimeObjectMap* RuntimeObjects, ULevel* Level, UObject* Outer,
                                                   const FSpudClassMetadata& Meta, int Depth, FArchive& In)
 {
 	FObjectProperty* StrongProp = CastField<FObjectProperty>(Prop);
@@ -788,6 +842,11 @@ bool SpudPropertyUtil::TryReadUObjectPropertyData(FProperty* Prop, void* Data,
 		else if (StrongProp) // Only strong refs for nested (owned)
 		{
 			const FString Val = ReadNestedUObjectPropertyData(StrongProp, Data, RuntimeObjects, Level, Outer, Meta, In);
+			UE_LOG(LogSpudProps, Verbose, TEXT("%s = %s"), *GetLogPrefix(Prop, Depth), *Val);
+		}
+		else if (WeakProp) // Weak object refs on nested (non-owned)
+		{
+			const FString Val = ReadNestedUObjectPropertyData(WeakProp, Data, RuntimeObjects, Level, Outer, Meta, In);
 			UE_LOG(LogSpudProps, Verbose, TEXT("%s = %s"), *GetLogPrefix(Prop, Depth), *Val);
 		}
 		return true;
@@ -975,7 +1034,7 @@ void SpudPropertyUtil::StoreContainerProperty(FProperty* Property,
 
 void SpudPropertyUtil::RestoreProperty(UObject* RootObject, FProperty* Property, void* ContainerPtr,
                                              const FSpudPropertyDef& StoredProperty,
-                                             const RuntimeObjectMap* RuntimeObjects,
+                                             RuntimeObjectMap* RuntimeObjects,
                                              const FSpudClassMetadata& Meta,
                                              int Depth,
                                              FMemoryReader& DataIn)
@@ -998,7 +1057,7 @@ void SpudPropertyUtil::RestoreProperty(UObject* RootObject, FProperty* Property,
 
 void SpudPropertyUtil::RestoreArrayProperty(UObject* RootObject, FArrayProperty* const AProp,
                                                   void* ContainerPtr, const FSpudPropertyDef& StoredProperty,
-                                                  const RuntimeObjectMap* RuntimeObjects,
+                                                  RuntimeObjectMap* RuntimeObjects,
                                                   const FSpudClassMetadata& Meta,
                                                   int Depth,
                                                   FMemoryReader& DataIn)
@@ -1023,7 +1082,7 @@ void SpudPropertyUtil::RestoreArrayProperty(UObject* RootObject, FArrayProperty*
 
 void SpudPropertyUtil::RestoreMapProperty(UObject* RootObject, FMapProperty* const MProp,
                                                   void* ContainerPtr, const FSpudPropertyDef& StoredProperty,
-                                                  const RuntimeObjectMap* RuntimeObjects,
+                                                  RuntimeObjectMap* RuntimeObjects,
                                                   const FSpudClassMetadata& Meta,
                                                   int Depth,
                                                   FMemoryReader& DataIn)
@@ -1062,7 +1121,7 @@ void SpudPropertyUtil::RestoreMapProperty(UObject* RootObject, FMapProperty* con
 
 void SpudPropertyUtil::RestoreContainerProperty(UObject* RootObject, FProperty* const Property,
                                                       void* ContainerPtr, const FSpudPropertyDef& StoredProperty,
-                                                      const RuntimeObjectMap* RuntimeObjects,
+                                                      RuntimeObjectMap* RuntimeObjects,
                                                       const FSpudClassMetadata& Meta,
                                                       int Depth,
                                                       FMemoryReader& DataIn)

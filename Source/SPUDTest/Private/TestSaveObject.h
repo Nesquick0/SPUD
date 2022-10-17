@@ -27,7 +27,9 @@ public:
 
 	UPROPERTY(SaveGame)
 	int NestedIntVal;
-	
+
+	UPROPERTY()
+	FGuid SpudGuid;
 };
 
 /// A test with all values in a struct
@@ -317,6 +319,9 @@ class SPUDTEST_API UTestNestedChild1 : public UObject
 public:
 	UPROPERTY(SaveGame)
 	FString NestedStringVal1;
+
+	UPROPERTY()
+	FGuid SpudGuid;
 };
 
 UCLASS()
@@ -326,6 +331,9 @@ class SPUDTEST_API UTestNestedChild2 : public UObject
 public:
 	UPROPERTY(SaveGame)
 	FString NestedStringVal2;
+
+	UPROPERTY()
+	FGuid SpudGuid;
 };
 
 UCLASS()
@@ -335,6 +343,9 @@ class SPUDTEST_API UTestNestedChild3 : public UObject
 public:
 	UPROPERTY(SaveGame)
 	FString NestedStringVal3;
+
+	UPROPERTY()
+	FGuid SpudGuid;
 };
 
 UCLASS()
@@ -344,6 +355,9 @@ class SPUDTEST_API UTestNestedChild4 : public UObject
 public:
 	UPROPERTY(SaveGame)
 	FString NestedStringVal4;
+
+	UPROPERTY()
+	FGuid SpudGuid;
 };
 
 UCLASS()
@@ -353,6 +367,9 @@ class SPUDTEST_API UTestNestedChild5 : public UObject
 public:
 	UPROPERTY(SaveGame)
 	FString NestedStringVal5;
+
+	UPROPERTY()
+	FGuid SpudGuid;
 };
 
 UCLASS()
@@ -375,3 +392,45 @@ public:
 	UPROPERTY(SaveGame)
 	UTestNestedChild5* UObjectVal5;
 };
+
+
+/// Test of multiple parents to one uobject
+UCLASS()
+class SPUDTEST_API UTestSaveMultipleParentsChild : public UObject
+{
+	GENERATED_BODY()
+public:
+	UPROPERTY(SaveGame)
+	FString StringVal;
+
+	UPROPERTY()
+	FGuid SpudGuid;
+};
+
+UCLASS()
+class SPUDTEST_API UTestSaveMultipleParentsOwner : public UObject
+{
+	GENERATED_BODY()
+public:
+	UPROPERTY(SaveGame)
+	UTestSaveMultipleParentsChild* UObjectVal1;
+};
+
+UCLASS()
+class SPUDTEST_API UTestSaveMultipleParentsOther : public UObject
+{
+	GENERATED_BODY()
+public:
+	UPROPERTY(SaveGame)
+	UTestSaveMultipleParentsChild* UObjectVal1;
+};
+
+UCLASS()
+class SPUDTEST_API UTestSaveMultipleParentsWeak : public UObject
+{
+	GENERATED_BODY()
+public:
+	UPROPERTY(SaveGame)
+	TWeakObjectPtr<UTestSaveMultipleParentsChild> UObjectVal1;
+};
+

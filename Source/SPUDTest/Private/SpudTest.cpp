@@ -361,3 +361,40 @@ bool FTestNestedObject::RunTest(const FString& Parameters)
 
 	return true;
 }
+
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FTestMultipleObjectPtr, "SPUDTest.MultipleObjectPtr",
+	EAutomationTestFlags::EditorContext |
+	EAutomationTestFlags::ClientContext |
+	EAutomationTestFlags::ProductFilter)
+
+	bool FTestMultipleObjectPtr::RunTest(const FString& Parameters)
+{
+	auto SavedParent1 = NewObject<UTestSaveMultipleParentsOwner>();
+	auto SavedParent2 = NewObject<UTestSaveMultipleParentsOther>();
+	auto SavedParent3 = NewObject<UTestSaveMultipleParentsWeak>();
+	SavedParent1->UObjectVal1 = NewObject<UTestSaveMultipleParentsChild>();
+	SavedParent2->UObjectVal1 = SavedParent1->UObjectVal1;
+	SavedParent3->UObjectVal1 = SavedParent1->UObjectVal1;
+	SavedParent1->UObjectVal1->StringVal = TEXT("TestString");
+
+	auto State = NewObject<USpudState>();
+	State->StoreGlobalObject(SavedParent1, "TestObject1");
+	State->StoreGlobalObject(SavedParent2, "TestObject2");
+	State->StoreGlobalObject(SavedParent3, "TestObject3");
+
+	auto LoadedParent1 = NewObject<UTestSaveMultipleParentsOwner>();
+	auto LoadedParent2 = NewObject<UTestSaveMultipleParentsOther>();
+	auto LoadedParent3 = NewObject<UTestSaveMultipleParentsWeak>();
+	State->RestoreGlobalObject(LoadedParent1, "TestObject1");
+	State->RestoreGlobalObject(LoadedParent2, "TestObject2");
+	State->RestoreGlobalObject(LoadedParent3, "TestObject3");
+	LoadedParent1->UObjectVal1->StringVal = TEXT("NewString");
+
+	TestEqual("UObject1 and UObject2 should be same", LoadedParent1->UObjectVal1, LoadedParent2->UObjectVal1);
+	TestEqual("UObject1 and UObject2 should have same string", LoadedParent1->UObjectVal1->StringVal, LoadedParent2->UObjectVal1->StringVal);
+	TestEqual("UObject1 and UObject3 should be same", LoadedParent1->UObjectVal1, LoadedParent3->UObjectVal1.Get());
+	TestEqual("UObject1 and UObject3 should have same string", LoadedParent1->UObjectVal1->StringVal, LoadedParent3->UObjectVal1.Get() ? LoadedParent3->UObjectVal1->StringVal : TEXT(""));
+
+	return true;
+}

@@ -429,7 +429,7 @@ void USpudState::RestoreLevel(ULevel* Level)
 	FScopeLock LevelLock(&LevelData->Mutex);
 	
 	UE_LOG(LogSpudState, Verbose, TEXT("RESTORE level %s - Start"), *LevelName);
-	TMap<FGuid, UObject*> RuntimeObjectsByGuid;
+	RuntimeObjectsByGuid.Empty();
 	// Respawn dynamic actors first; they need to exist in order for cross-references in level actors to work
 	for (auto&& SpawnedActor : LevelData->SpawnedActors.Contents)
 	{
@@ -485,7 +485,7 @@ void USpudState::RestoreActor(AActor* Actor, bool bReportError)
 		return;
 	}
 
-	RestoreActor(Actor, LevelData, nullptr);
+	RestoreActor(Actor, LevelData, &RuntimeObjectsByGuid);
 }
 
 AActor* USpudState::RespawnActor(const FSpudSpawnedActorData& SpawnedActor,
@@ -588,7 +588,7 @@ bool USpudState::ShouldActorVelocityBeRestored(AActor* Actor) const
 	return true;
 }
 
-void USpudState::RestoreActor(AActor* Actor, FSpudSaveData::TLevelDataPtr LevelData, const TMap<FGuid, UObject*>* RuntimeObjects)
+void USpudState::RestoreActor(AActor* Actor, FSpudSaveData::TLevelDataPtr LevelData, TMap<FGuid, UObject*>* RuntimeObjects)
 {
 	if (Actor->HasAnyFlags(RF_ClassDefaultObject|RF_ArchetypeObject|RF_BeginDestroyed))
 		return;
@@ -745,7 +745,7 @@ void USpudState::RestoreCoreActorData(AActor* Actor, const FSpudCoreActorData& F
 }
 
 void USpudState::RestoreObjectProperties(UObject* Obj, const FSpudPropertyData& FromData, const FSpudClassMetadata& Meta,
-	const TMap<FGuid, UObject*>* RuntimeObjects, int StartDepth)
+	TMap<FGuid, UObject*>* RuntimeObjects, int StartDepth)
 {
 	FMemoryReader In(FromData.Data);
 	RestoreObjectProperties(Obj, In, Meta, RuntimeObjects, StartDepth);
@@ -754,7 +754,7 @@ void USpudState::RestoreObjectProperties(UObject* Obj, const FSpudPropertyData& 
 
 
 void USpudState::RestoreObjectProperties(UObject* Obj, FMemoryReader& In, const FSpudClassMetadata& Meta,
-	const TMap<FGuid, UObject*>* RuntimeObjects, int StartDepth)
+	TMap<FGuid, UObject*>* RuntimeObjects, int StartDepth)
 {
 	const auto ClassName = SpudPropertyUtil::GetClassName(Obj);
 	const auto ClassDef = Meta.GetClassDef(ClassName);
@@ -788,7 +788,7 @@ void USpudState::RestoreObjectProperties(UObject* Obj, FMemoryReader& In, const 
 void USpudState::RestoreObjectPropertiesFast(UObject* Obj, FMemoryReader& In,
                                              const FSpudClassMetadata& Meta,
                                              TSharedPtr<const FSpudClassDef> ClassDef,
-                                             const TMap<FGuid, UObject*>* RuntimeObjects,
+                                             TMap<FGuid, UObject*>* RuntimeObjects,
                                              int StartDepth)
 {
 	UE_LOG(LogSpudState, Verbose, TEXT("%s FAST path, %d properties"), *SpudPropertyUtil::GetLogPrefix(StartDepth), ClassDef->Properties.Num());
@@ -802,7 +802,7 @@ void USpudState::RestoreObjectPropertiesFast(UObject* Obj, FMemoryReader& In,
 void USpudState::RestoreObjectPropertiesSlow(UObject* Obj, FMemoryReader& In,
                                                        const FSpudClassMetadata& Meta,
                                                        TSharedPtr<const FSpudClassDef> ClassDef,
-                                                       const TMap<FGuid, UObject*>* RuntimeObjects,
+                                                       TMap<FGuid, UObject*>* RuntimeObjects,
                                                        int StartDepth)
 {
 	UE_LOG(LogSpudState, Verbose, TEXT("%s SLOW path, %d properties"), *SpudPropertyUtil::GetLogPrefix(StartDepth), ClassDef->Properties.Num());
@@ -963,8 +963,8 @@ void USpudState::RestoreGlobalObject(UObject* Obj, const FSpudNamedObjectData* D
 	{
 		UE_LOG(LogSpudState, Verbose, TEXT("* RESTORE Global Object %s"), *Data->Name)
 		PreRestoreObject(Obj, SaveData.GlobalData.GetUserDataModelVersion());
-		
-		RestoreObjectProperties(Obj, Data->Properties, SaveData.GlobalData.Metadata, nullptr);
+
+		RestoreObjectProperties(Obj, Data->Properties, SaveData.GlobalData.Metadata, &RuntimeObjectsByGuid);
 
 		PostRestoreObject(Obj, Data->CustomData, SaveData.GlobalData.GetUserDataModelVersion());
 	}
