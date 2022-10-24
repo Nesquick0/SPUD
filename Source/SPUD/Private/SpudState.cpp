@@ -74,19 +74,47 @@ USpudState::StorePropertyVisitor::StorePropertyVisitor(
 }
 
 bool USpudState::StorePropertyVisitor::VisitProperty(UObject* RootObject, FProperty* Property,
-                                                                    uint32 CurrentPrefixID, void* ContainerPtr,
-                                                                    int Depth)
+                                                     uint32 CurrentPrefixID, void* ContainerPtr,
+                                                     int Depth, const FSpudPropertyDef& StoredPropertyCustom)
 {
-	SpudPropertyUtil::StoreProperty(RootObject, Property, CurrentPrefixID, ContainerPtr, Depth, ClassDef, PropertyOffsets, Meta, Out);
+	const bool AlreadyStoredUObject = CheckNestedUObjectAlreadyStored(Property, ContainerPtr);
 
-	StoreNestedUObjectIfNeeded(RootObject, Property, CurrentPrefixID, ContainerPtr, Depth);
+	SpudPropertyUtil::StoreProperty(RootObject, Property, CurrentPrefixID, ContainerPtr, Depth, ClassDef, PropertyOffsets, Meta, Out, *this);
+
+	if (!AlreadyStoredUObject)
+	{
+		StoreNestedUObjectIfNeeded(RootObject, Property, CurrentPrefixID, ContainerPtr, Depth);
+	}
 	
 	return true;
 }
 
+bool USpudState::StorePropertyVisitor::CheckNestedUObjectAlreadyStored(FProperty* Property, void* ContainerPtr)
+{
+	// Special case nested UObjects - we cascade if not null, but based on the runtime type (this is why visitor does not cascade,
+	// since it only has the static type and in the case of nulls wouldn't know what to do)
+	if (SpudPropertyUtil::IsNestedUObjectProperty(Property))
+	{
+		if (const auto OProp = CastField<FObjectProperty>(Property))
+		{
+			const void* DataPtr = Property->ContainerPtrToValuePtr<void>(ContainerPtr);
+			const auto Obj = OProp->GetObjectPropertyValue(DataPtr);
 
-void USpudState::StorePropertyVisitor::StoreNestedUObjectIfNeeded(UObject* RootObject, FProperty* Property,
-	uint32 CurrentPrefixID, void* ContainerPtr, int Depth)
+			if (Obj)
+			{
+				// Check whether Obj was already saved somewhere.
+				if (SpudPropertyUtil::GetGuidProperty(Obj).IsValid())
+				{
+					return true;
+				}
+			}
+		}
+	}
+	return false;
+}
+
+void USpudState::StorePropertyVisitor::StoreNestedUObjectIfNeeded(const UObject* RootObject, FProperty* Property,
+	uint32 CurrentPrefixID, const void* ContainerPtr, int Depth)
 {
 	// Special case nested UObjects - we cascade if not null, but based on the runtime type (this is why visitor does not cascade,
 	// since it only has the static type and in the case of nulls wouldn't know what to do)
@@ -361,7 +389,19 @@ void USpudState::StoreGlobalObject(UObject* Obj, FSpudNamedObjectData* Data)
 		FSpudClassMetadata& Meta = SaveData.GlobalData.Metadata;
 		const bool bIsCallback = Obj->GetClass()->ImplementsInterface(USpudObjectCallback::StaticClass());
 
-		UE_LOG(LogSpudState, Verbose, TEXT("* STORE Global object: %s"), *Obj->GetName());
+		const auto GuidProperty = SpudPropertyUtil::FindGuidProperty(Obj);
+		if (GuidProperty)
+		{
+			Data->Guid = SpudPropertyUtil::GetGuidProperty(Obj, GuidProperty);
+			if (!Data->Guid.IsValid())
+			{
+				// We automatically generate a Guid for any referenced object if it doesn't have one already
+				Data->Guid = FGuid::NewGuid();
+				SpudPropertyUtil::SetGuidProperty(Obj, GuidProperty, Data->Guid);
+			}
+		}
+
+		UE_LOG(LogSpudState, Verbose, TEXT("* STORE Global object: %s, %s"), *Obj->GetName(), *Data->Guid.ToString(EGuidFormats::DigitsWithHyphensInBraces));
 
 		if (bIsCallback)
 			ISpudObjectCallback::Execute_SpudPreSave(Obj, this);
@@ -818,8 +858,8 @@ uint32 USpudState::RestorePropertyVisitor::GetNestedPrefix(FProperty* Prop, uint
 	return SpudPropertyUtil::GetNestedPrefixID(CurrentPrefixID, Prop, Meta);
 }
 
-void USpudState::RestorePropertyVisitor::RestoreNestedUObjectIfNeeded(UObject* RootObject, FProperty* Property,
-														uint32 CurrentPrefixID, void* ContainerPtr, int Depth)
+void USpudState::RestorePropertyVisitor::RestoreNestedUObjectIfNeeded(const UObject* RootObject, FProperty* Property,
+														uint32 CurrentPrefixID, const void* ContainerPtr, int Depth)
 {
 	if (SpudPropertyUtil::IsNestedUObjectProperty(Property))
 	{
@@ -830,7 +870,7 @@ void USpudState::RestorePropertyVisitor::RestoreNestedUObjectIfNeeded(UObject* R
 
 			// By this point, the restore will have created the instance if the data was non-null, since the
 			// property before this contains the class (or null)
-			if (Obj)
+			if (Obj && Obj->GetOuter() == RootObject)
 			{
 				const bool IsCallback = Obj->GetClass()->ImplementsInterface(USpudObjectCallback::StaticClass());
 
@@ -855,18 +895,28 @@ void USpudState::RestorePropertyVisitor::RestoreNestedUObjectIfNeeded(UObject* R
 }
 
 bool USpudState::RestoreFastPropertyVisitor::VisitProperty(UObject* RootObject, FProperty* Property,
-                                                           uint32 CurrentPrefixID, void* ContainerPtr, int Depth)
+                                                           uint32 CurrentPrefixID, void* ContainerPtr, int Depth, const FSpudPropertyDef& StoredPropertyCustom)
 {
 	// Fast path can just iterate both sides of properties because stored properties are in the same order
 	if (StoredPropertyIterator)
 	{
-		auto& StoredProperty = *StoredPropertyIterator;
-		SpudPropertyUtil::RestoreProperty(RootObject, Property, ContainerPtr, StoredProperty, RuntimeObjects, Meta, Depth, DataIn);
+		auto& StoredProperty = (StoredPropertyCustom.DataType == ESST_Unknown) ? *StoredPropertyIterator : StoredPropertyCustom;
+		SpudPropertyUtil::RestoreProperty(RootObject, Property, ContainerPtr, StoredProperty, RuntimeObjects, Meta, Depth, DataIn, *this);
 
 		// We DON'T increment the property iterator for custom structs, since they don't have any values of their own
 		// It's their nested properties that have the values, they're only context
 		if (!SpudPropertyUtil::IsCustomStructProperty(Property))
-			++StoredPropertyIterator;
+		{
+			if (Property->HasAnyPropertyFlags(CPF_SaveGame) /*Property->GetOwner<FArrayProperty>()*/)
+			{
+				++StoredPropertyIterator;
+				// For map property increment twice (key, value).
+				if (const auto MProp = CastField<FMapProperty>(Property))
+				{
+					++StoredPropertyIterator;
+				}
+			}
+		}
 
 		RestoreNestedUObjectIfNeeded(RootObject, Property, CurrentPrefixID, ContainerPtr, Depth);
 
@@ -876,7 +926,7 @@ bool USpudState::RestoreFastPropertyVisitor::VisitProperty(UObject* RootObject, 
 }
 
 bool USpudState::RestoreSlowPropertyVisitor::VisitProperty(UObject* RootObject, FProperty* Property,
-                                                                     uint32 CurrentPrefixID, void* ContainerPtr, int Depth)
+                                                                     uint32 CurrentPrefixID, void* ContainerPtr, int Depth, const FSpudPropertyDef& StoredPropertyCustom)
 {
 	// This is the slow alternate property restoration path
 	// Used when the runtime class definition no longer matches the stored class definition
@@ -915,7 +965,7 @@ bool USpudState::RestoreSlowPropertyVisitor::VisitProperty(UObject* RootObject, 
 	}
 	auto& StoredProperty = ClassDef->Properties[*PropertyIndexPtr];
 	
-	SpudPropertyUtil::RestoreProperty(RootObject, Property, ContainerPtr, StoredProperty, RuntimeObjects, Meta, Depth, DataIn);
+	SpudPropertyUtil::RestoreProperty(RootObject, Property, ContainerPtr, StoredProperty, RuntimeObjects, Meta, Depth, DataIn, *this);
 
 	RestoreNestedUObjectIfNeeded(RootObject, Property, CurrentPrefixID, ContainerPtr, Depth);
 	
@@ -964,6 +1014,7 @@ void USpudState::RestoreGlobalObject(UObject* Obj, const FSpudNamedObjectData* D
 		UE_LOG(LogSpudState, Verbose, TEXT("* RESTORE Global Object %s"), *Data->Name)
 		PreRestoreObject(Obj, SaveData.GlobalData.GetUserDataModelVersion());
 
+		RuntimeObjectsByGuid.Add(Data->Guid, Obj);
 		RestoreObjectProperties(Obj, Data->Properties, SaveData.GlobalData.Metadata, &RuntimeObjectsByGuid);
 
 		PostRestoreObject(Obj, Data->CustomData, SaveData.GlobalData.GetUserDataModelVersion());
@@ -980,7 +1031,7 @@ void USpudState::StoreActor(AActor* Actor, FSpudSaveData::TLevelDataPtr LevelDat
 	// For runtime created objects we need another stable GUID
 	// For that we'll rely on a SpudGuid property
 	// For convenience you can use one of the persistent base classes to get that, otherwise you need
-	// to add a SpudGuid propery
+	// to add a SpudGuid property
 	
 	// This is how we identify run-time created objects
 	bool bRespawn = ShouldActorBeRespawnedOnRestore(Actor);

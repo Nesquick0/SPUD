@@ -434,3 +434,59 @@ public:
 	TWeakObjectPtr<UTestSaveMultipleParentsChild> UObjectVal1;
 };
 
+/// Test of object link cycle.
+UCLASS()
+class SPUDTEST_API UTestSaveObjectCycle : public UObject
+{
+	GENERATED_BODY()
+public:
+	UPROPERTY(SaveGame)
+	UTestSaveObjectCycle* UObjectVal;
+
+	UPROPERTY(SaveGame)
+	FString StringVal;
+
+	UPROPERTY()
+	FGuid SpudGuid;
+};
+
+/// Test of object in array and cycle.
+UCLASS()
+class SPUDTEST_API UTestSaveObjectArrayParent : public UObject
+{
+	GENERATED_BODY()
+public:
+	UPROPERTY(SaveGame)
+	TArray<UTestSaveObjectCycle*> UObjects;
+
+	UPROPERTY(SaveGame)
+	FString StringVal;
+
+	UPROPERTY()
+	FGuid SpudGuid;
+};
+
+/// Test of simple struct in array.
+USTRUCT(BlueprintType)
+struct FTestSimpleStruct
+{
+	GENERATED_USTRUCT_BODY()
+
+	UPROPERTY(SaveGame)
+	FString TestString;
+
+	UPROPERTY(SaveGame)
+	float TestFloat = 0.0f;
+};
+
+UCLASS()
+class SPUDTEST_API UTestStructInArray : public UObject
+{
+	GENERATED_BODY()
+public:
+	UPROPERTY(SaveGame)
+	FTestSimpleStruct SimpleStruct;
+
+	UPROPERTY(SaveGame)
+	TArray<FTestSimpleStruct> SimpleStructArray;
+};

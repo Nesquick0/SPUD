@@ -348,6 +348,7 @@ struct SPUD_API FSpudObjectData : public FSpudChunk
 struct SPUD_API FSpudNamedObjectData : public FSpudObjectData
 {
 	FString Name;
+	FGuid Guid;
 
 	/// Key value for indexing this item; name is unique in the level
 	FString Key() const { return Name; }

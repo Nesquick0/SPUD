@@ -93,7 +93,7 @@ public:
 		 * @returns True to continue parsing properties, false to quit early
 		 */
 		virtual bool VisitProperty(UObject* RootObject, FProperty* Property, uint32 CurrentPrefixID,
-		                           void* ContainerPtr, int Depth) = 0;
+		                           void* ContainerPtr, int Depth, const FSpudPropertyDef& StoredProperty = FSpudPropertyDef()) = 0;
 		
 		/**
 		* @brief Be informed about an unsupported property. This is a property which is marked as persistent but
@@ -172,7 +172,7 @@ public:
 		StoredMatchesRuntimePropertyVisitor(TArray<FSpudPropertyDef>::TConstIterator InStoredPropertyIterator,
                                             const FSpudClassDef& InClassDef, const FSpudClassMetadata& InMeta);
 		virtual bool VisitProperty(UObject* RootObject, FProperty* Property, uint32 CurrentPrefixID,
-		                           void* ContainerPtr, int Depth) override;
+		                           void* ContainerPtr, int Depth, const FSpudPropertyDef& StoredPropertyCustom) override;
 		virtual uint32 GetNestedPrefix(FProperty* Prop, uint32 CurrentPrefixID) override;
 		// After visiting, was everything a match
 		bool IsMatch() const { return bMatches; }
@@ -206,33 +206,36 @@ public:
 	/// Visit all properties of a class definition, with no instance
 	static void VisitPersistentProperties(const UStruct* Definition, PropertyVisitor& Visitor);
 	
-	static void StoreProperty(const UObject* RootObject,
+	static void StoreProperty(UObject* RootObject,
 	                          FProperty* Property,
 	                          uint32 PrefixID,
-	                          const void* ContainerPtr,
+	                          void* ContainerPtr,
 	                          int Depth,
 	                          TSharedPtr<FSpudClassDef> ClassDef,
 	                          TArray<uint32>& PropertyOffsets,
 	                          FSpudClassMetadata& Meta,
-	                          FMemoryWriter& Out);
+	                          FMemoryWriter& Out,
+	                          PropertyVisitor& Visitor);
 	static void StoreArrayProperty(FArrayProperty* AProp,
-	                               const UObject* RootObject,
+	                               UObject* RootObject,
 	                               uint32 PrefixID,
-	                               const void* ContainerPtr,
+	                               void* ContainerPtr,
 	                               int Depth,
 	                               TSharedPtr<FSpudClassDef> ClassDef,
 	                               TArray<uint32>& PropertyOffsets,
 	                               FSpudClassMetadata& Meta,
-	                               FMemoryWriter& Out);
+	                               FMemoryWriter& Out,
+	                               PropertyVisitor& Visitor);
 	static void StoreMapProperty(FMapProperty* MProp,
-	                             const UObject* RootObject,
+	                             UObject* RootObject,
 	                             uint32 PrefixID,
-	                             const void* ContainerPtr,
+	                             void* ContainerPtr,
 	                             int Depth,
 	                             TSharedPtr<FSpudClassDef> ClassDef,
 	                             TArray<uint32>& PropertyOffsets,
 	                             FSpudClassMetadata& Meta,
-	                             FMemoryWriter& Out);
+	                             FMemoryWriter& Out,
+	                             PropertyVisitor& Visitor);
 	static void StoreContainerProperty(FProperty* Property,
 	                                   const UObject* RootObject,
 	                                   uint32 PrefixID,
@@ -251,17 +254,20 @@ public:
 	                            const FSpudPropertyDef& StoredProperty,
 	                            RuntimeObjectMap* RuntimeObjects,
 	                            const FSpudClassMetadata& Meta,
-	                            int Depth, FMemoryReader& DataIn);
+	                            int Depth, FMemoryReader& DataIn,
+	                            PropertyVisitor& Visitor);
 	static void RestoreArrayProperty(UObject* RootObject, FArrayProperty* const AProp, void* ContainerPtr,
 	                                 const FSpudPropertyDef& StoredProperty,
 	                                 RuntimeObjectMap* RuntimeObjects,
 	                                 const FSpudClassMetadata& Meta,
-	                                 int Depth, FMemoryReader& DataIn);
+	                                 int Depth, FMemoryReader& DataIn,
+	                                 PropertyVisitor& Visitor);
 	static void RestoreMapProperty(UObject* RootObject, FMapProperty* const AProp, void* ContainerPtr,
 	                               const FSpudPropertyDef& StoredProperty,
 	                               RuntimeObjectMap* RuntimeObjects,
 	                               const FSpudClassMetadata& Meta,
-	                               int Depth, FMemoryReader& DataIn);
+	                               int Depth, FMemoryReader& DataIn,
+	                               PropertyVisitor& Visitor);
 	static void RestoreContainerProperty(UObject* RootObject, FProperty* const Property,
 	                                     void* ContainerPtr, const FSpudPropertyDef& StoredProperty,
 	                                     RuntimeObjectMap* RuntimeObjects,

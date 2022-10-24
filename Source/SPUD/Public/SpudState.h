@@ -93,9 +93,10 @@ protected:
 		FMemoryWriter& Out;
 	public:
 		StorePropertyVisitor(USpudState* ParentState, TSharedPtr<FSpudClassDef> InClassDef, TArray<uint32>& InPropertyOffsets, FSpudClassMetadata& InMeta, FMemoryWriter& InOut);
-		void StoreNestedUObjectIfNeeded(UObject* RootObject, FProperty* Property, uint32 CurrentPrefixID, void* ContainerPtr, int Depth);
+		bool CheckNestedUObjectAlreadyStored(FProperty* Property, void* ContainerPtr);
+		void StoreNestedUObjectIfNeeded(const UObject* RootObject, FProperty* Property, uint32 CurrentPrefixID, const void* ContainerPtr, int Depth);
 		virtual bool VisitProperty(UObject* RootObject, FProperty* Property, uint32 CurrentPrefixID,
-		                           void* ContainerPtr, int Depth) override;
+		                           void* ContainerPtr, int Depth, const FSpudPropertyDef& StoredPropertyCustom) override;
 
 		virtual void UnsupportedProperty(UObject* RootObject, FProperty* Property, uint32 CurrentPrefixID,
 			int Depth) override;
@@ -154,7 +155,7 @@ protected:
 			ParentState(Parent), ClassDef(InClassDef), Meta(InMeta), RuntimeObjects(InRuntimeObjects), DataIn(InDataIn) {}
 
 		virtual uint32 GetNestedPrefix(FProperty* Prop, uint32 CurrentPrefixID) override;
-		virtual void RestoreNestedUObjectIfNeeded(UObject* RootObject, FProperty* Property, uint32 CurrentPrefixID, void* ContainerPtr, int Depth);
+		virtual void RestoreNestedUObjectIfNeeded(const UObject* RootObject, FProperty* Property, uint32 CurrentPrefixID, const void* ContainerPtr, int Depth);
 	};
 
 
@@ -173,7 +174,7 @@ protected:
 		}
 
 		virtual bool VisitProperty(UObject* RootObject, FProperty* Property, uint32 CurrentPrefixID,
-		                           void* ContainerPtr, int Depth) override;
+		                           void* ContainerPtr, int Depth, const FSpudPropertyDef& StoredPropertyCustom) override;
 	};
 	
 	// Slow path restoration when runtime class is the same as stored class
@@ -184,7 +185,7 @@ protected:
 			: RestorePropertyVisitor(Parent, InDataIn, InClassDef, InMeta, InRuntimeObjects) {}
 
 		virtual bool VisitProperty(UObject* RootObject, FProperty* Property, uint32 CurrentPrefixID,
-		                           void* ContainerPtr, int Depth) override;
+		                           void* ContainerPtr, int Depth, const FSpudPropertyDef& StoredPropertyCustom) override;
 	};
 
 

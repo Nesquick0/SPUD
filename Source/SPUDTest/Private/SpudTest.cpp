@@ -368,7 +368,7 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FTestMultipleObjectPtr, "SPUDTest.MultipleObjec
 	EAutomationTestFlags::ClientContext |
 	EAutomationTestFlags::ProductFilter)
 
-	bool FTestMultipleObjectPtr::RunTest(const FString& Parameters)
+bool FTestMultipleObjectPtr::RunTest(const FString& Parameters)
 {
 	auto SavedParent1 = NewObject<UTestSaveMultipleParentsOwner>();
 	auto SavedParent2 = NewObject<UTestSaveMultipleParentsOther>();
@@ -396,5 +396,139 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FTestMultipleObjectPtr, "SPUDTest.MultipleObjec
 	TestEqual("UObject1 and UObject3 should be same", LoadedParent1->UObjectVal1, LoadedParent3->UObjectVal1.Get());
 	TestEqual("UObject1 and UObject3 should have same string", LoadedParent1->UObjectVal1->StringVal, LoadedParent3->UObjectVal1.Get() ? LoadedParent3->UObjectVal1->StringVal : TEXT(""));
 
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FTestObjectCycle, "SPUDTest.TestObjectCycle",
+	EAutomationTestFlags::EditorContext |
+	EAutomationTestFlags::ClientContext |
+	EAutomationTestFlags::ProductFilter)
+
+bool FTestObjectCycle::RunTest(const FString& Parameters)
+{
+	{
+		// First test with cycle of 2 objects.
+		auto SavedObj = NewObject<UTestSaveObjectCycle>();
+		SavedObj->StringVal = TEXT("First");
+		SavedObj->UObjectVal = NewObject<UTestSaveObjectCycle>();
+		SavedObj->UObjectVal->StringVal = TEXT("Second");
+		SavedObj->UObjectVal->UObjectVal = SavedObj;
+
+		auto State = NewObject<USpudState>();
+		State->StoreGlobalObject(SavedObj, "TestObject");
+
+		auto LoadedObj = NewObject<UTestSaveObjectCycle>();
+		State->RestoreGlobalObject(LoadedObj, "TestObject");
+		LoadedObj->UObjectVal->UObjectVal->StringVal = TEXT("FirstNew");
+
+		TestEqual("First object string should be same as first-second-first string", LoadedObj->StringVal, LoadedObj->UObjectVal->UObjectVal->StringVal);
+	}
+
+	{
+		// Second test with cycle of 3 objects.
+		auto SavedObj = NewObject<UTestSaveObjectCycle>();
+		SavedObj->StringVal = TEXT("First");
+		SavedObj->UObjectVal = NewObject<UTestSaveObjectCycle>();
+		SavedObj->UObjectVal->StringVal = TEXT("Second");
+		SavedObj->UObjectVal->UObjectVal = NewObject<UTestSaveObjectCycle>();
+		SavedObj->UObjectVal->UObjectVal->StringVal = TEXT("Third");
+		SavedObj->UObjectVal->UObjectVal->UObjectVal = SavedObj;
+
+		auto State = NewObject<USpudState>();
+		State->StoreGlobalObject(SavedObj, "TestObject");
+
+		auto LoadedObj = NewObject<UTestSaveObjectCycle>();
+		State->RestoreGlobalObject(LoadedObj, "TestObject");
+		LoadedObj->UObjectVal->UObjectVal->StringVal = TEXT("FirstNew");
+
+		TestEqual("First object string should be same as first-second-third-first string", LoadedObj->StringVal, LoadedObj->UObjectVal->UObjectVal->UObjectVal->StringVal);
+	}
+
+	{
+		// Second test with cycle of 3 objects (second and third in cycle).
+		auto SavedObj = NewObject<UTestSaveObjectCycle>();
+		SavedObj->StringVal = TEXT("First");
+		SavedObj->UObjectVal = NewObject<UTestSaveObjectCycle>();
+		SavedObj->UObjectVal->StringVal = TEXT("Second");
+		SavedObj->UObjectVal->UObjectVal = NewObject<UTestSaveObjectCycle>();
+		SavedObj->UObjectVal->UObjectVal->StringVal = TEXT("Third");
+		SavedObj->UObjectVal->UObjectVal->UObjectVal = SavedObj->UObjectVal;
+
+		auto State = NewObject<USpudState>();
+		State->StoreGlobalObject(SavedObj, "TestObject");
+
+		auto LoadedObj = NewObject<UTestSaveObjectCycle>();
+		State->RestoreGlobalObject(LoadedObj, "TestObject");
+		LoadedObj->UObjectVal->UObjectVal->StringVal = TEXT("FirstNew");
+
+		TestEqual("First object string should be same as first-second-third-first string", LoadedObj->UObjectVal->StringVal, LoadedObj->UObjectVal->UObjectVal->UObjectVal->StringVal);
+	}
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FTestObjectArray, "SPUDTest.TestObjectArray",
+EAutomationTestFlags::EditorContext |
+EAutomationTestFlags::ClientContext |
+EAutomationTestFlags::ProductFilter)
+
+bool FTestObjectArray::RunTest(const FString& Parameters)
+{
+	auto SavedObj = NewObject<UTestSaveObjectArrayParent>();
+	SavedObj->StringVal = TEXT("Parent");
+	for (int i = 0; i<3; i++)
+	{
+		UTestSaveObjectCycle* ChildObj = SavedObj->UObjects.Add_GetRef(NewObject<UTestSaveObjectCycle>());
+		ChildObj->StringVal = FString::Printf(TEXT("Child_%d"), i);
+		//SavedObj->UObjectVal->UObjectVal = SavedObj;
+	}
+
+	auto State = NewObject<USpudState>();
+	State->StoreGlobalObject(SavedObj, "TestObject");
+
+	auto LoadedObj = NewObject<UTestSaveObjectArrayParent>();
+	State->RestoreGlobalObject(LoadedObj, "TestObject");
+
+	TestEqual("Parent string should be same loaded Parent", SavedObj->StringVal, LoadedObj->StringVal);
+	LoadedObj->StringVal = TEXT("ParentNew");
+	TestEqual("Parent string should be same loaded Parent", LoadedObj->StringVal, TEXT("ParentNew"));
+	for (int i = 0; i<3; i++)
+	{
+		TestEqual("Child string should be same as loaded child string", SavedObj->UObjects[i]->StringVal, LoadedObj->UObjects[i]->StringVal);
+	}
+
+	return true;
+}
+
+IMPLEMENT_SIMPLE_AUTOMATION_TEST(FTestStructArray, "SPUDTest.TestStructArray",
+	EAutomationTestFlags::EditorContext |
+	EAutomationTestFlags::ClientContext |
+	EAutomationTestFlags::ProductFilter)
+
+bool FTestStructArray::RunTest(const FString& Parameters)
+{
+	auto SavedObj = NewObject<UTestStructInArray>();
+	SavedObj->SimpleStruct.TestString = TEXT("Parent");
+	SavedObj->SimpleStruct.TestFloat = 1.0f;
+	for (int i = 0; i<3; i++)
+	{
+		FTestSimpleStruct& ChildStruct = SavedObj->SimpleStructArray.Add_GetRef(FTestSimpleStruct());
+		ChildStruct.TestString = FString::Printf(TEXT("Struct_%d"), i);
+		ChildStruct.TestFloat = i;
+	}
+
+	auto State = NewObject<USpudState>();
+	State->StoreGlobalObject(SavedObj, "TestObject");
+
+	auto LoadedObj = NewObject<UTestStructInArray>();
+	State->RestoreGlobalObject(LoadedObj, "TestObject");
+
+	TestEqual("Parent string should be same loaded Parent", SavedObj->SimpleStruct.TestString, LoadedObj->SimpleStruct.TestString);
+	TestEqual("Parent float should be same loaded Parent", SavedObj->SimpleStruct.TestFloat, LoadedObj->SimpleStruct.TestFloat);
+	for (int i = 0; i<3; i++)
+	{
+		TestEqual("Child string should be same as loaded child string", SavedObj->SimpleStructArray[i].TestString, LoadedObj->SimpleStructArray[i].TestString);
+		TestEqual("Child float should be same as loaded child string", SavedObj->SimpleStructArray[i].TestFloat, LoadedObj->SimpleStructArray[i].TestFloat);
+	}
 	return true;
 }

@@ -388,6 +388,7 @@ void FSpudNamedObjectData::WriteToArchive(FSpudChunkedDataArchive& Ar)
 	if (ChunkStart(Ar))
 	{
 		Ar << Name;
+		Ar << Guid;
 		CoreData.WriteToArchive(Ar);
 		Properties.WriteToArchive(Ar);
 		CustomData.WriteToArchive(Ar);
@@ -400,6 +401,7 @@ void FSpudNamedObjectData::ReadFromArchive(FSpudChunkedDataArchive& Ar, uint32 S
 	if (ChunkStart(Ar))
 	{
 		Ar << Name;
+		Ar << Guid;
 		CoreData.ReadFromArchive(Ar, StoredSystemVersion);
 		Properties.ReadFromArchive(Ar, StoredSystemVersion);
 		CustomData.ReadFromArchive(Ar, StoredSystemVersion);
