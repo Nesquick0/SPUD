@@ -452,12 +452,27 @@ public:
 
 /// Test of object in array and cycle.
 UCLASS()
+class SPUDTEST_API UTestSaveObjectArrayChild : public UObject
+{
+	GENERATED_BODY()
+public:
+	UPROPERTY(SaveGame)
+	class UTestSaveObjectArrayParent* UObjectVal;
+
+	UPROPERTY(SaveGame)
+	FString StringVal;
+
+	UPROPERTY()
+	FGuid SpudGuid;
+};
+
+UCLASS()
 class SPUDTEST_API UTestSaveObjectArrayParent : public UObject
 {
 	GENERATED_BODY()
 public:
 	UPROPERTY(SaveGame)
-	TArray<UTestSaveObjectCycle*> UObjects;
+	TArray<UTestSaveObjectArrayChild*> UObjects;
 
 	UPROPERTY(SaveGame)
 	FString StringVal;
@@ -489,4 +504,7 @@ public:
 
 	UPROPERTY(SaveGame)
 	TArray<FTestSimpleStruct> SimpleStructArray;
+
+	UPROPERTY(SaveGame)
+	TMap<int, FTestSimpleStruct> SimpleStructMap;
 };

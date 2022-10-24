@@ -246,6 +246,12 @@ public:
 	                                   TArray<uint32>& PropertyOffsets,
 	                                   FSpudClassMetadata& Meta,
 	                                   FMemoryWriter& Out);
+	static bool VisitStructProperty(FProperty* Property,
+	                                UObject* RootObject,
+	                                uint32 PrefixID,
+	                                void* ContainerPtr,
+	                                int Depth,
+	                                PropertyVisitor& Visitor);
 
 
 	typedef TMap<FGuid, UObject*> RuntimeObjectMap;

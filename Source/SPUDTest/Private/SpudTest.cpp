@@ -478,9 +478,9 @@ bool FTestObjectArray::RunTest(const FString& Parameters)
 	SavedObj->StringVal = TEXT("Parent");
 	for (int i = 0; i<3; i++)
 	{
-		UTestSaveObjectCycle* ChildObj = SavedObj->UObjects.Add_GetRef(NewObject<UTestSaveObjectCycle>());
+		UTestSaveObjectArrayChild* ChildObj = SavedObj->UObjects.Add_GetRef(NewObject<UTestSaveObjectArrayChild>());
 		ChildObj->StringVal = FString::Printf(TEXT("Child_%d"), i);
-		//SavedObj->UObjectVal->UObjectVal = SavedObj;
+		ChildObj->UObjectVal = SavedObj;
 	}
 
 	auto State = NewObject<USpudState>();
@@ -495,6 +495,8 @@ bool FTestObjectArray::RunTest(const FString& Parameters)
 	for (int i = 0; i<3; i++)
 	{
 		TestEqual("Child string should be same as loaded child string", SavedObj->UObjects[i]->StringVal, LoadedObj->UObjects[i]->StringVal);
+		TestEqual("Child object link should be same as parent", LoadedObj->UObjects[i]->UObjectVal, LoadedObj);
+		TestEqual("Parent in child link should have same string as parent", LoadedObj->UObjects[i]->UObjectVal->StringVal, LoadedObj->StringVal);
 	}
 
 	return true;
@@ -514,7 +516,11 @@ bool FTestStructArray::RunTest(const FString& Parameters)
 	{
 		FTestSimpleStruct& ChildStruct = SavedObj->SimpleStructArray.Add_GetRef(FTestSimpleStruct());
 		ChildStruct.TestString = FString::Printf(TEXT("Struct_%d"), i);
-		ChildStruct.TestFloat = i;
+		ChildStruct.TestFloat = i+1;
+
+		FTestSimpleStruct& ChildStruct2 = SavedObj->SimpleStructMap.Add(i, FTestSimpleStruct());
+		ChildStruct2.TestString = FString::Printf(TEXT("Struct_%d"), i+11);
+		ChildStruct2.TestFloat = i+11;
 	}
 
 	auto State = NewObject<USpudState>();
@@ -527,8 +533,10 @@ bool FTestStructArray::RunTest(const FString& Parameters)
 	TestEqual("Parent float should be same loaded Parent", SavedObj->SimpleStruct.TestFloat, LoadedObj->SimpleStruct.TestFloat);
 	for (int i = 0; i<3; i++)
 	{
-		TestEqual("Child string should be same as loaded child string", SavedObj->SimpleStructArray[i].TestString, LoadedObj->SimpleStructArray[i].TestString);
-		TestEqual("Child float should be same as loaded child string", SavedObj->SimpleStructArray[i].TestFloat, LoadedObj->SimpleStructArray[i].TestFloat);
+		TestEqual("Child array string should be same as loaded child string", SavedObj->SimpleStructArray[i].TestString, LoadedObj->SimpleStructArray[i].TestString);
+		TestEqual("Child array float should be same as loaded child float", SavedObj->SimpleStructArray[i].TestFloat, LoadedObj->SimpleStructArray[i].TestFloat);
+		TestEqual("Child map string should be same as loaded child string", SavedObj->SimpleStructMap[i].TestString, LoadedObj->SimpleStructMap[i].TestString);
+		TestEqual("Child map float should be same as loaded child float", SavedObj->SimpleStructMap[i].TestFloat, LoadedObj->SimpleStructMap[i].TestFloat);
 	}
 	return true;
 }

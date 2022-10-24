@@ -329,24 +329,9 @@ bool SpudPropertyUtil::VisitPersistentProperties(UObject* RootObject, const UStr
 			return false;
 
 		// Now deal with cascading into nested structs (custom structs, not FVector etc)
-		if (const auto SProp = CastField<FStructProperty>(Property))
+		if (!VisitStructProperty(Property, RootObject, PrefixID, ContainerPtr, Depth, Visitor))
 		{
-			if (!IsBuiltInStructProperty(SProp))
-			{
-				// Everything underneath a custom struct is recorded with a nested prefix
-				const uint32 NewPrefixID = Visitor.GetNestedPrefix(SProp, PrefixID);
-				// Should never have no prefix, if none abort
-				if (NewPrefixID == SPUDDATA_PREFIXID_NONE)
-					continue;
-
-				const int NewDepth = Depth + 1;
-				const auto StructPtr = ContainerPtr ? SProp->ContainerPtrToValuePtr<void>(ContainerPtr) : nullptr;
-
-				Visitor.StartNestedStruct(RootObject, SProp, NewPrefixID, NewDepth);
-				if (!VisitPersistentProperties(RootObject, SProp->Struct, NewPrefixID, StructPtr, true, NewDepth, Visitor))
-					return false;				
-				Visitor.EndNestedStruct(RootObject, SProp, NewPrefixID, NewDepth);
-			}
+			return false;
 		}
 
 		// We no longer cascade into UObjects here, since they are separate types
@@ -930,8 +915,8 @@ void SpudPropertyUtil::StoreArrayProperty(FArrayProperty* AProp,
 		void *ElemPtr = ArrayHelper.GetRawPtr(ArrayElem);
 		//StoreContainerProperty(AProp->Inner, RootObject, PrefixID, ElemPtr, true, Depth, ClassDef, PropertyOffsets, Meta, Out);
 		Visitor.VisitProperty(RootObject, AProp->Inner, PrefixID, ElemPtr, Depth);
+		VisitStructProperty(AProp->Inner, RootObject, PrefixID, ElemPtr, Depth, Visitor);
 	}
-	
 }
 
 void SpudPropertyUtil::StoreMapProperty(FMapProperty* MProp,
@@ -956,7 +941,8 @@ void SpudPropertyUtil::StoreMapProperty(FMapProperty* MProp,
 			*RootObject->GetName(), *MProp->GetName(), NumElements, std::numeric_limits<uint16>::max());
 	}
 
-	//RegisterProperty(MProp, PrefixID, ClassDef, PropertyOffsets, Meta, Out);
+	RegisterProperty(MProp->KeyProp, PrefixID, ClassDef, PropertyOffsets, Meta, Out);
+	RegisterProperty(MProp->ValueProp, PrefixID, ClassDef, PropertyOffsets, Meta, Out);
 
 	// Data is count first
 	uint16 ShortElems = static_cast<uint16>(NumElements);
@@ -974,7 +960,9 @@ void SpudPropertyUtil::StoreMapProperty(FMapProperty* MProp,
 		//StoreContainerProperty(MProp->KeyProp, RootObject, PrefixID, KeyPtr, true, Depth, ClassDef, PropertyOffsets, Meta, Out);
 		//StoreContainerProperty(MProp->ValueProp, RootObject, PrefixID, KeyPtr, true, Depth, ClassDef, PropertyOffsets, Meta, Out);
 		Visitor.VisitProperty(RootObject, MProp->KeyProp, PrefixID, KeyPtr, Depth);
+		VisitStructProperty(MProp->KeyProp, RootObject, PrefixID, KeyPtr, Depth, Visitor);
 		Visitor.VisitProperty(RootObject, MProp->ValueProp, PrefixID, KeyPtr, Depth);
+		VisitStructProperty(MProp->ValueProp, RootObject, PrefixID, KeyPtr, Depth, Visitor);
 	}
 }
 
@@ -1040,13 +1028,42 @@ void SpudPropertyUtil::StoreContainerProperty(FProperty* Property,
 	
 }
 
+bool SpudPropertyUtil::VisitStructProperty(FProperty* Property, UObject* RootObject, uint32 PrefixID, void* ContainerPtr, int Depth, PropertyVisitor& Visitor)
+{
+	// Now deal with cascading into nested structs (custom structs, not FVector etc)
+	if (const auto SProp = CastField<FStructProperty>(Property))
+	{
+		if (!IsBuiltInStructProperty(SProp))
+		{
+			// Everything underneath a custom struct is recorded with a nested prefix
+			const uint32 NewPrefixID = Visitor.GetNestedPrefix(SProp, PrefixID);
+			// Should never have no prefix, if none abort
+			if (NewPrefixID == SPUDDATA_PREFIXID_NONE)
+				return true;
+
+			const int NewDepth = Depth + 1;
+			const auto StructPtr = ContainerPtr ? SProp->ContainerPtrToValuePtr<void>(ContainerPtr) : nullptr;
+
+			Visitor.StartNestedStruct(RootObject, SProp, NewPrefixID, NewDepth);
+			if (!VisitPersistentProperties(RootObject, SProp->Struct, NewPrefixID, StructPtr, true, NewDepth, Visitor))
+			{
+				UE_LOG(LogSpudProps, Error, TEXT("Array property %s/%s struct was unable to save."),
+					*RootObject->GetName(), *Property->GetName());
+				return false;
+			}
+			Visitor.EndNestedStruct(RootObject, SProp, NewPrefixID, NewDepth);
+		}
+	}
+	return true;
+}
+
 void SpudPropertyUtil::RestoreProperty(UObject* RootObject, FProperty* Property, void* ContainerPtr,
-                                             const FSpudPropertyDef& StoredProperty,
-                                             RuntimeObjectMap* RuntimeObjects,
-                                             const FSpudClassMetadata& Meta,
-                                             int Depth,
-                                             FMemoryReader& DataIn,
-                                             PropertyVisitor& Visitor)
+                                       const FSpudPropertyDef& StoredProperty,
+                                       RuntimeObjectMap* RuntimeObjects,
+                                       const FSpudClassMetadata& Meta,
+                                       int Depth,
+                                       FMemoryReader& DataIn,
+                                       PropertyVisitor& Visitor)
 {
 	// Arrays supported, but not maps / sets yet
 	if (const auto AProp = CastField<FArrayProperty>(Property))
@@ -1087,8 +1104,8 @@ void SpudPropertyUtil::RestoreArrayProperty(UObject* RootObject, FArrayProperty*
 		void *ElemPtr = ArrayHelper.GetRawPtr(ArrayElem);
 		//RestoreContainerProperty(RootObject, AProp->Inner, ElemPtr, StoredProperty, RuntimeObjects, Meta, Depth, DataIn);
 		Visitor.VisitProperty(RootObject, AProp->Inner, StoredProperty.PrefixID, ElemPtr, Depth);
+		VisitStructProperty(AProp->Inner, RootObject, StoredProperty.PrefixID, ElemPtr, Depth, Visitor);
 	}
-	
 }
 
 void SpudPropertyUtil::RestoreMapProperty(UObject* RootObject, FMapProperty* const MProp,
@@ -1127,7 +1144,9 @@ void SpudPropertyUtil::RestoreMapProperty(UObject* RootObject, FMapProperty* con
 		//RestoreContainerProperty(RootObject, MProp->KeyProp, KeyPtr, StoredPropertyKey, RuntimeObjects, Meta, Depth, DataIn);
 		//RestoreContainerProperty(RootObject, MProp->ValueProp, KeyPtr, StoredPropertyValue, RuntimeObjects, Meta, Depth, DataIn);
 		Visitor.VisitProperty(RootObject, MProp->KeyProp, StoredProperty.PrefixID, KeyPtr, Depth, StoredPropertyKey);
+		VisitStructProperty(MProp->KeyProp, RootObject, StoredProperty.PrefixID, KeyPtr, Depth, Visitor);
 		Visitor.VisitProperty(RootObject, MProp->ValueProp, StoredProperty.PrefixID, KeyPtr, Depth, StoredPropertyValue);
+		VisitStructProperty(MProp->ValueProp, RootObject, StoredProperty.PrefixID, KeyPtr, Depth, Visitor);
 	}
 
 	MapHelper.Rehash();
@@ -1262,11 +1281,31 @@ bool SpudPropertyUtil::StoredMatchesRuntimePropertyVisitor::VisitProperty(UObjec
 		return false;
 	}
 
-	// Check key type.
+	// Array of custom structs can't be iterated by fast visitor. Use slow instead.
+	if (const auto AProp = CastField<FArrayProperty>(RuntimeProperty))
+	{
+		if (IsCustomStructProperty(AProp->Inner))
+		{
+			bMatches = false;
+			return false;
+		}
+	}
 	if (const auto MProp = CastField<FMapProperty>(RuntimeProperty))
 	{
+		// Map with custom structs can't be iterated by fast visitor. Use slow instead.
+		if (IsCustomStructProperty(MProp->KeyProp))
+		{
+			bMatches = false;
+			return false;
+		}
+		if (IsCustomStructProperty(MProp->ValueProp))
+		{
+			bMatches = false;
+			return false;
+		}
+
+		// Check key type.
 		auto& StoredPropertyKey = *StoredPropertyIterator++;
-		// Check type
 		if (!StoredPropertyTypeMatchesRuntime(MProp->KeyProp, StoredPropertyKey, false))
 		{
 			UE_LOG(LogSpudProps, Verbose, TEXT("StoredClassDefMatchesRuntime: Type mismatch %s/%s: %d != %d"),
